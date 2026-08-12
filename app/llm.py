@@ -75,6 +75,42 @@ def build_input(
     return messages
 
 
+def chat_url(base_url: str) -> str:
+    """Chat Completions endpoint (domestic OpenAI-compatible providers)."""
+    return base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
+
+
+def build_chat_messages(
+    instructions: str,
+    prompt: str,
+    history: Sequence[MessageItem] = (),
+    prefill_user: str = "",
+    prefill_assistant: str = "",
+) -> list[MessageItem]:
+    """System message, prefill pair, bounded history, then the current user turn."""
+    messages: list[MessageItem] = [{"role": "system", "content": instructions}]
+    if prefill_user and prefill_assistant:
+        messages.append({"role": "user", "content": prefill_user})
+        messages.append({"role": "assistant", "content": prefill_assistant})
+    messages.extend(history)
+    messages.append({"role": "user", "content": prompt})
+    return messages
+
+
+def extract_chat_content(data: Any) -> str:
+    """Extract the assistant text from a Chat Completions response."""
+    if not isinstance(data, dict):
+        raise RuntimeError("API response was not a JSON object")
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("API response did not contain choices")
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("API response did not contain message content")
+    return content.strip()
+
+
 @dataclass(frozen=True)
 class RetryDecision:
     action: str  # "retry" | "raise"
@@ -166,33 +202,52 @@ class ResponsesClient:
         if self._guard is not None:
             self._guard.check()
 
-        payload: dict[str, Any] = {
-            "model": self._cfg.api_model,
-            "instructions": instructions,
-            "input": build_input(prompt, history, prefill_user, prefill_assistant),
-            "store": False,
-        }
-        if self._cfg.api_reasoning_effort:
-            payload["reasoning"] = {"effort": self._cfg.api_reasoning_effort}
-
         headers = {"Authorization": f"Bearer {self._cfg.api_key}", "Content-Type": "application/json"}
         client = await self._ensure_client()
+
+        if self._cfg.api_style == "chat":
+            url = chat_url(self._cfg.api_base_url)
+            payload: dict[str, Any] = {
+                "model": self._cfg.api_model,
+                "messages": build_chat_messages(instructions, prompt, history, prefill_user, prefill_assistant),
+            }
+            extract = extract_chat_content
+        else:
+            url = api_url(self._cfg.api_base_url)
+            payload = {
+                "model": self._cfg.api_model,
+                "instructions": instructions,
+                "input": build_input(prompt, history, prefill_user, prefill_assistant),
+                "store": False,
+            }
+            if self._cfg.api_reasoning_effort:
+                payload["reasoning"] = {"effort": self._cfg.api_reasoning_effort}
+            extract = extract_output_text
+
         return await self._post_with_retry(
             client,
             "POST",
-            api_url(self._cfg.api_base_url),
+            url,
+            extract,
             headers=headers,
             json=payload,
             timeout=self._cfg.api_timeout,
         )
 
-    async def _post_with_retry(self, client: httpx.AsyncClient, method: str, url: str, **kwargs: Any) -> str:
+    async def _post_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        url: str,
+        extract,
+        **kwargs: Any,
+    ) -> str:
         max_attempts = self._cfg.max_retries + 1
         for attempt in range(1, max_attempts + 1):
             try:
                 response = await client.request(method, url, **kwargs)
                 response.raise_for_status()
-                return extract_output_text(response.json())
+                return extract(response.json())
             except Exception as exc:  # noqa: BLE001 — classify decides retry vs raise
                 decision = classify(
                     exc,

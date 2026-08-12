@@ -71,6 +71,9 @@ class Config:
     api_key: str
     api_model: str
     api_reasoning_effort: str
+    # "responses" (OpenAI Responses API) or "chat" (OpenAI-compatible Chat Completions,
+    # used by domestic providers like DeepSeek / 智谱 / 通义).
+    api_style: str
     # Prompts
     system_prompt: str
     public_system_prompt: str
@@ -124,6 +127,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         api_key=_get(env, "API_KEY"),
         api_model=_get(env, "API_MODEL", "gpt-4o-mini"),
         api_reasoning_effort=_get(env, "API_REASONING_EFFORT").strip(),
+        api_style=(_get(env, "API_STYLE", "responses").strip().lower() or "responses"),
         system_prompt=system_prompt,
         public_system_prompt=public_system_prompt,
         rating_system_prompt=_get(env, "RATING_SYSTEM_PROMPT").strip(),

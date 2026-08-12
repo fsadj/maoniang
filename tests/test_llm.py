@@ -2,7 +2,15 @@ import httpx
 import pytest
 
 from app import config as config_mod
-from app.llm import ResponsesClient, build_input, classify, extract_output_text
+from app.llm import (
+    ResponsesClient,
+    build_chat_messages,
+    build_input,
+    chat_url,
+    classify,
+    extract_chat_content,
+    extract_output_text,
+)
 
 
 # ---------- classify (pure) ----------
@@ -146,3 +154,69 @@ async def test_complete_enforces_budget_before_posting():
     with pytest.raises(BudgetExceeded):
         await client.complete(prompt="hi", history=[], instructions="sys", prefill_user="", prefill_assistant="")
     assert calls["n"] == 1  # second call never reached the transport
+
+
+# ---------- Chat Completions (domestic providers, API_STYLE=chat) ----------
+
+def _chat_cfg(**overrides):
+    env = {
+        "API_KEY": "sk-test",
+        "API_BASE_URL": "https://api.deepseek.com/v1",
+        "API_MODEL": "deepseek-chat",
+        "API_STYLE": "chat",
+        "LLM_MAX_RETRIES": "0",
+        "LLM_RETRY_BASE_DELAY": "0",
+        "LLM_RETRY_MAX_DELAY": "0",
+    }
+    env.update(overrides)
+    return config_mod.load_config(env)
+
+
+def test_chat_url_appends_endpoint():
+    assert chat_url("https://api.deepseek.com/v1").endswith("/chat/completions")
+    assert chat_url("https://x/v1/chat/completions") == "https://x/v1/chat/completions"
+
+
+def test_build_chat_messages_order():
+    msgs = build_chat_messages("你是助手", "现在", history=[{"role": "user", "content": "old"}],
+                               prefill_user="pu", prefill_assistant="pa")
+    assert msgs == [
+        {"role": "system", "content": "你是助手"},
+        {"role": "user", "content": "pu"},
+        {"role": "assistant", "content": "pa"},
+        {"role": "user", "content": "old"},
+        {"role": "user", "content": "现在"},
+    ]
+
+
+def test_extract_chat_content():
+    assert extract_chat_content({"choices": [{"message": {"content": " hi "}}]}) == "hi"
+    with pytest.raises(RuntimeError):
+        extract_chat_content({"choices": []})
+
+
+async def test_chat_complete_posts_to_chat_completions_and_extracts():
+    import json as _json
+    seen = {}
+
+    def handler(req):
+        seen["url"] = str(req.url)
+        seen["body"] = req.read().decode()
+        return httpx.Response(200, json={"choices": [{"message": {"content": "喵～"}}]})
+
+    answer = await _client(_chat_cfg(), handler).complete(
+        prompt="你好", history=[], instructions="你是猫娘", prefill_user="", prefill_assistant="")
+    assert answer == "喵～"
+    assert seen["url"].endswith("/chat/completions")
+    body = _json.loads(seen["body"])
+    assert body["messages"][0] == {"role": "system", "content": "你是猫娘"}
+    assert body["messages"][-1] == {"role": "user", "content": "你好"}
+    assert "instructions" not in body and "store" not in body  # chat style drops Responses-only fields
+
+
+async def test_responses_style_unchanged_when_api_style_unset():
+    def handler(req):
+        return httpx.Response(200, json={"output_text": "ok"})
+    answer = await _client(_cfg(), handler).complete(
+        prompt="hi", history=[], instructions="sys", prefill_user="", prefill_assistant="")
+    assert answer == "ok"
