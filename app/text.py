@@ -41,6 +41,32 @@ def sender_display_name(card: object, nickname: object) -> str:
     return card_s or nickname_s or "未知成员"
 
 
+# Brackets that can break out of the "[name]\n{body}" framing used by public messages.
+_FRAMING_BRACKETS = set("[]{}()<>【】")
+# Authority/role tokens that signal an impersonation attempt (e.g. a card set to "系统").
+_AUTHORITY_TOKENS = ("系统", "管理员", "群主", "公告", "通知", "admin", "system", "管理")
+
+
+def sanitize_display_name(name: object) -> str:
+    """Make a group card/nickname safe to interpolate into a prompt.
+
+    Strips control chars/newlines and framing brackets (which could close the auto-opened
+    '[' and let a following line read as a system directive), neutralizes anything that
+    impersonates an authority role, and caps length. Falls back to '未知成员' when empty
+    or suspicious. This is the defense against the public-mode nickname-injection vector.
+    """
+    if not name:
+        return "未知成员"
+    cleaned = "".join(ch for ch in str(name) if ch >= " ")  # drop control chars incl. newlines
+    cleaned = "".join(ch for ch in cleaned if ch not in _FRAMING_BRACKETS).strip()
+    if not cleaned:
+        return "未知成员"
+    if any(tok in cleaned.lower() for tok in _AUTHORITY_TOKENS):
+        return "未知成员"
+    return cleaned[:16]
+
+
+
 def format_public_body(display_name: str, body: str) -> str:
     """Prefix a public message with the sender's display name."""
     return f"[{display_name}]\n{body}"

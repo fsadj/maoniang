@@ -44,7 +44,9 @@ class ConversationService:
     ) -> str:
         async with self._store.locked(scope):
             # Re-read AFTER acquiring the lock: another turn may have completed while we waited.
-            history = self._store.history(scope)
+            # Rating is a one-shot evaluation: it must NOT see conversation history, otherwise a
+            # poisoned prior turn could exfiltrate RATING_SYSTEM_PROMPT.
+            history = [] if is_rating else self._store.history(scope)
             try:
                 if is_rating and not instructions:
                     raise RuntimeError("RATING_SYSTEM_PROMPT is not configured")

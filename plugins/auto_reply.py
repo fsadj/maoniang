@@ -58,7 +58,7 @@ async def handle_group_message(event: GroupMessageEvent) -> None:
     command = text.detect_private_command(prompt, is_public)
     prompt = prompt[: config.max_message_length]
     if is_public:
-        display = text.sender_display_name(event.sender.card, event.sender.nickname)
+        display = text.sanitize_display_name(text.sender_display_name(event.sender.card, event.sender.nickname))
         prompt = text.format_public_body(display, prompt)
 
     scope: PrivateScope | PublicScope = (

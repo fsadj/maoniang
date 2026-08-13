@@ -60,6 +60,8 @@ async def test_rating_does_not_append_and_clears_history():
     await svc.handle(scope, "q", instructions="sys", prefill_user="", prefill_assistant="")
     await svc.handle(scope, "评分", instructions="RATING", prefill_user="", prefill_assistant="", is_rating=True)
     assert client.calls[-1]["instructions"] == "RATING"
+    # Rating is a one-shot eval: it must NOT receive (possibly poisoned) conversation history.
+    assert client.calls[-1]["history"] == []
     # Rating must not have appended itself, and must have cleared prior history.
     assert store.history(scope) == []
 
