@@ -17,10 +17,15 @@ _service: ConversationService | None = None
 def get_store() -> InMemoryStore:
     global _store
     if _store is None:
-        _store = InMemoryStore(
-            max_personal_messages=config.config.personal_history_max,
-            max_public_messages=config.config.max_public_messages,
-        )
+        cfg = config.config
+        if cfg.memory_backend == "sqlite":
+            from .history_sqlite import SqliteConversationStore
+
+            _store = SqliteConversationStore(
+                cfg.personal_history_max, cfg.max_public_messages, cfg.sqlite_path
+            )
+        else:
+            _store = InMemoryStore(cfg.personal_history_max, cfg.max_public_messages)
     return _store
 
 

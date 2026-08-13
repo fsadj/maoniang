@@ -88,6 +88,9 @@ class Config:
     max_message_length: int
     max_conversation_turns: int
     max_public_messages: int
+    # Persistence
+    memory_backend: str
+    sqlite_path: str
     # Reliability / cost
     max_retries: int
     retry_base_delay: float
@@ -140,6 +143,8 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         max_message_length=_get_int(env, "MAX_MESSAGE_LENGTH", 2000),
         max_conversation_turns=max(1, _get_int(env, "MAX_CONVERSATION_TURNS", 20)),
         max_public_messages=max(1, _get_int(env, "MAX_PUBLIC_CONVERSATION_MESSAGES", 500)),
+        memory_backend=(_get(env, "MEMORY_BACKEND", "memory").strip().lower() or "memory"),
+        sqlite_path=_get(env, "SQLITE_PATH", "data/memory.sqlite"),
         max_retries=max(0, _get_int(env, "LLM_MAX_RETRIES", 3)),
         retry_base_delay=max(0.0, _get_float(env, "LLM_RETRY_BASE_DELAY", 0.5)),
         retry_max_delay=max(0.0, _get_float(env, "LLM_RETRY_MAX_DELAY", 20.0)),

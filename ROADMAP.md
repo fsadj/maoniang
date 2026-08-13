@@ -23,10 +23,10 @@
 > ⚠️ **破甲(越狱)不做**:脆(模型一升级就废)+ 违反服务商政策 + 封号风险(2088307985 已栽过一次)。换模型是正解,架构已支持换端点。越狱词若要,你自己填进 `.env`。
 
 ## ② 持久化(sqlite)— **P0**  *(最高性价比,修"重启丢上下文")*
-- [ ] `app/history_sqlite.py`:`check_same_thread=False` + 串行锁(或单 worker executor)+ `WAL`
-- [ ] `MEMORY_BACKEND=sqlite` 写穿 + 启动 hydrate(默认仍 `memory`,行为兼容)
-- [ ] 对话表保留策略(按 `seq`/时间 prune,防库无限膨胀)
-- [ ] 验证 InMemory 与 Sqlite 行为一致(maxlen、隔离、清空)
+- [x] `app/history_sqlite.py`:`check_same_thread=False` + `threading.Lock` 串行 + `WAL`(子类化 InMemoryStore,复用 locked/deque/隔离)
+- [x] `MEMORY_BACKEND=sqlite` write-through + 启动 lazy-hydrate(默认仍 `memory`,兼容)
+- [x] 保留策略:append 时 prune 到 `cap` 行(防库膨胀)
+- [x] InMemory 与 Sqlite 行为一致(maxlen、隔离、清空)+ 跨"重启"持久化测试(6 用例)
 
 ## ③ 注入加固 — **P1**  *(现在 live + 共享,这是真暴露面,扩用前必做)*
 - [ ] 群名片/昵称入 prompt 前脱敏:剥 `[]{}`/换行/角色词(`系统`/`SYSTEM`/`assistant`/`user`)、限长、可疑则置 `未知成员`
