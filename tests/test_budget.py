@@ -14,6 +14,7 @@ def test_disabled_guard_never_raises():
     guard = BudgetGuard(0, now=_fixed_now(datetime(2026, 8, 12, 10, 0, tzinfo=ZoneInfo("Asia/Shanghai"))))
     for _ in range(100):
         guard.check()
+    assert guard.used_today == 100  # counts even when budget disabled (for 状态)
     assert guard.remaining == -1
 
 

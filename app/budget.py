@@ -36,14 +36,12 @@ class BudgetGuard:
         return self._now().date()
 
     def check(self) -> None:
-        """Increment the day's counter; raise BudgetExceeded if already at the cap."""
-        if self._limit <= 0:
-            return
+        """Increment the day's counter (always, for observability); raise if at the cap."""
         today = self._today()
         if today != self._day:
             self._day = today
             self._count = 0
-        if self._count >= self._limit:
+        if self._limit > 0 and self._count >= self._limit:
             raise BudgetExceeded(f"daily API call limit ({self._limit}) reached")
         self._count += 1
 
@@ -58,7 +56,7 @@ class BudgetGuard:
 
     @property
     def used_today(self) -> int:
-        """Calls made today (0 when disabled or on a fresh day)."""
-        if self._limit <= 0 or self._today() != self._day:
+        """Calls made today (tracked even when the budget is disabled, for the 状态 command)."""
+        if self._today() != self._day:
             return 0
         return self._count
