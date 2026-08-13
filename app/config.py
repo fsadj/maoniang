@@ -91,6 +91,11 @@ class Config:
     # Persistence
     memory_backend: str
     sqlite_path: str
+    # Summarization (context compaction) — opt-in, off by default
+    summarize_enabled: bool
+    summarize_at_messages: int
+    summarize_batch: int
+    summarize_model: str
     # Reliability / cost
     max_retries: int
     retry_base_delay: float
@@ -145,6 +150,10 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         max_public_messages=max(1, _get_int(env, "MAX_PUBLIC_CONVERSATION_MESSAGES", 500)),
         memory_backend=(_get(env, "MEMORY_BACKEND", "memory").strip().lower() or "memory"),
         sqlite_path=_get(env, "SQLITE_PATH", "data/memory.sqlite"),
+        summarize_enabled=(_get(env, "SUMMARIZE_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")),
+        summarize_at_messages=max(2, _get_int(env, "SUMMARIZE_AT_MESSAGES", 28)),
+        summarize_batch=max(2, _get_int(env, "SUMMARIZE_BATCH", 16)),
+        summarize_model=_get(env, "SUMMARIZE_MODEL", "").strip(),
         max_retries=max(0, _get_int(env, "LLM_MAX_RETRIES", 3)),
         retry_base_delay=max(0.0, _get_float(env, "LLM_RETRY_BASE_DELAY", 0.5)),
         retry_max_delay=max(0.0, _get_float(env, "LLM_RETRY_MAX_DELAY", 20.0)),

@@ -21,6 +21,15 @@ from pathlib import Path
 
 from .history import InMemoryStore, PrivateScope, PublicScope, Scope
 
+_SUMMARIES_SCHEMA = """CREATE TABLE IF NOT EXISTS summaries (
+    scope_type TEXT NOT NULL,
+    group_id INTEGER NOT NULL,
+    user_id INTEGER,
+    summary TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (scope_type, group_id, user_id)
+)"""
+
 _SCHEMA = """CREATE TABLE IF NOT EXISTS turns (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     scope_type TEXT NOT NULL,
@@ -54,6 +63,7 @@ class SqliteConversationStore(InMemoryStore):
             self._db.execute("PRAGMA journal_mode=WAL")
             self._db.execute("PRAGMA synchronous=NORMAL")
             self._db.execute(_SCHEMA)
+            self._db.execute(_SUMMARIES_SCHEMA)
             self._db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_turns_scope "
                 "ON turns(scope_type, group_id, user_id, seq)"
@@ -111,6 +121,52 @@ class SqliteConversationStore(InMemoryStore):
             self._db.execute(
                 "DELETE FROM turns WHERE scope_type=? AND group_id=? AND user_id IS ?",
                 (stype, gid, uid),
+            )
+            self._db.execute(
+                "DELETE FROM summaries WHERE scope_type=? AND group_id=? AND user_id IS ?",
+                (stype, gid, uid),
+            )
+            self._db.commit()
+
+    def get_summary(self, scope: Scope) -> str:
+        stype, gid, uid = _scope_key(scope)
+        with self._db_lock:
+            row = self._db.execute(
+                "SELECT summary FROM summaries WHERE scope_type=? AND group_id=? AND user_id IS ?",
+                (stype, gid, uid),
+            ).fetchone()
+        return row[0] if row else ""
+
+    def set_summary(self, scope: Scope, summary: str) -> None:
+        stype, gid, uid = _scope_key(scope)
+        now = datetime.now(timezone.utc).isoformat()
+        with self._db_lock:
+            self._db.execute(
+                "INSERT INTO summaries(scope_type, group_id, user_id, summary, updated_at) "
+                "VALUES(?,?,?,?,?) ON CONFLICT(scope_type, group_id, user_id) "
+                "DO UPDATE SET summary=excluded.summary, updated_at=excluded.updated_at",
+                (stype, gid, uid, summary, now),
+            )
+            self._db.commit()
+
+    def clear_summary(self, scope: Scope) -> None:
+        super().clear_summary(scope)
+        stype, gid, uid = _scope_key(scope)
+        with self._db_lock:
+            self._db.execute(
+                "DELETE FROM summaries WHERE scope_type=? AND group_id=? AND user_id IS ?",
+                (stype, gid, uid),
+            )
+            self._db.commit()
+
+    def drop_oldest(self, scope: Scope, n: int) -> None:
+        super().drop_oldest(scope, n)  # popleft from the in-memory deque
+        stype, gid, uid = _scope_key(scope)
+        with self._db_lock:
+            self._db.execute(
+                "DELETE FROM turns WHERE rowid IN (SELECT rowid FROM turns "
+                "WHERE scope_type=? AND group_id=? AND user_id IS ? ORDER BY seq ASC LIMIT ?)",
+                (stype, gid, uid, n),
             )
             self._db.commit()
 

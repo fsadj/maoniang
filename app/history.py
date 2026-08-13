@@ -59,6 +59,7 @@ class InMemoryStore:
         }
         self._histories: dict[Scope, deque[MessageItem]] = {}
         self._locks: dict[Scope, asyncio.Lock] = {}
+        self._summaries: dict[Scope, str] = {}
 
     def _lock_for(self, scope: Scope) -> asyncio.Lock:
         lock = self._locks.get(scope)
@@ -91,3 +92,20 @@ class InMemoryStore:
 
     def clear(self, scope: Scope) -> None:
         self._histories.pop(scope, None)
+        self._summaries.pop(scope, None)
+
+    # ---- running summary (for context compaction; see app/summary.py) ----
+    def get_summary(self, scope: Scope) -> str:
+        return self._summaries.get(scope, "")
+
+    def set_summary(self, scope: Scope, summary: str) -> None:
+        self._summaries[scope] = summary
+
+    def clear_summary(self, scope: Scope) -> None:
+        self._summaries.pop(scope, None)
+
+    def drop_oldest(self, scope: Scope, n: int) -> None:
+        """Remove the oldest n messages from the in-memory deque (compaction)."""
+        deque_ = self._deque_for(scope)
+        for _ in range(min(n, len(deque_))):
+            deque_.popleft()

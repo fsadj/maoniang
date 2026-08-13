@@ -10,6 +10,7 @@ import logging
 
 import httpx
 
+from . import summary as summary_mod
 from .budget import BudgetExceeded
 from .config import Config
 from .history import ConversationStore, Scope
@@ -47,13 +48,17 @@ class ConversationService:
             # Rating is a one-shot evaluation: it must NOT see conversation history, otherwise a
             # poisoned prior turn could exfiltrate RATING_SYSTEM_PROMPT.
             history = [] if is_rating else self._store.history(scope)
+            summary = "" if is_rating else self._store.get_summary(scope)
+            full_instructions = (
+                instructions if is_rating else summary_mod.inject_summary(instructions, summary)
+            )
             try:
                 if is_rating and not instructions:
                     raise RuntimeError("RATING_SYSTEM_PROMPT is not configured")
                 answer = await self._client.complete(
                     prompt=prompt,
                     history=history,
-                    instructions=instructions,
+                    instructions=full_instructions,
                     prefill_user=prefill_user,
                     prefill_assistant=prefill_assistant,
                 )
@@ -68,6 +73,11 @@ class ConversationService:
             else:
                 if not is_rating:
                     self._store.append_turn(scope, prompt, answer)
+                    if (
+                        self._cfg.summarize_enabled
+                        and len(self._store.history(scope)) >= self._cfg.summarize_at_messages
+                    ):
+                        summary_mod.schedule_compact(scope, self._store, self._client, self._cfg)
             finally:
                 if is_rating:
                     self._store.clear(scope)

@@ -196,6 +196,7 @@ class ResponsesClient:
         instructions: str,
         prefill_user: str,
         prefill_assistant: str,
+        model: str | None = None,
     ) -> str:
         if not self._cfg.api_key:
             raise RuntimeError("API_KEY is not configured")
@@ -208,7 +209,7 @@ class ResponsesClient:
         if self._cfg.api_style == "chat":
             url = chat_url(self._cfg.api_base_url)
             payload: dict[str, Any] = {
-                "model": self._cfg.api_model,
+                "model": model or self._cfg.api_model,
                 "messages": build_chat_messages(instructions, prompt, history, prefill_user, prefill_assistant),
                 # DeepSeek v4: disable reasoning for faster, more direct casual replies
                 # (matches the blog worker's working config). Ignored by non-DeepSeek endpoints.
@@ -218,7 +219,7 @@ class ResponsesClient:
         else:
             url = api_url(self._cfg.api_base_url)
             payload = {
-                "model": self._cfg.api_model,
+                "model": model or self._cfg.api_model,
                 "instructions": instructions,
                 "input": build_input(prompt, history, prefill_user, prefill_assistant),
                 "store": False,
