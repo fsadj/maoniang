@@ -13,6 +13,10 @@ def test_parse_public_prompt_requires_newline_after_marker():
 
 def test_detect_private_commands_are_exact_and_personal_only():
     assert text.detect_private_command("清空", False) == "clear"
+    assert text.detect_private_command("清除", False) == "clear"
+    assert text.detect_private_command("重置", False) == "clear"
+    assert text.detect_private_command("重新开始", False) == "clear"
+    assert text.detect_private_command("reset", False) == "clear"
     assert text.detect_private_command("评分", False) == "rating"
     assert text.detect_private_command("清空一下", False) is None
     assert text.detect_private_command("评分 现在", False) is None

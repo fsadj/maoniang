@@ -23,11 +23,14 @@ def parse_public_prompt(text: str) -> str | None:
     return None
 
 
+_CLEAR_ALIASES = frozenset({"清空", "清除", "重置", "重新开始", "reset", "清除上下文", "清空上下文"})
+
+
 def detect_private_command(prompt: str, is_public: bool) -> str | None:
     """Recognize exact personal-only commands. Public mode never treats these as commands."""
     if is_public:
         return None
-    if prompt == "清空":
+    if prompt in _CLEAR_ALIASES:
         return "clear"
     if prompt == "评分":
         return "rating"
