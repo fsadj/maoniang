@@ -15,13 +15,15 @@ def test_detect_private_commands_are_exact_and_personal_only():
     assert text.detect_private_command("清空", False) == "clear"
     assert text.detect_private_command("清除", False) == "clear"
     assert text.detect_private_command("重置", False) == "clear"
-    assert text.detect_private_command("重新开始", False) == "clear"
     assert text.detect_private_command("reset", False) == "clear"
-    assert text.detect_private_command("评分", False) == "rating"
+    assert text.detect_private_command("帮助", False) == "help"
+    assert text.detect_private_command("?", False) == "help"
+    assert text.detect_private_command("状态", False) == "status"
+    assert text.detect_private_command("撤销", False) == "undo"
+    assert text.detect_private_command("undo", False) == "undo"
+    assert text.detect_private_command("评分", False) is None  # 评分 removed
     assert text.detect_private_command("清空一下", False) is None
-    assert text.detect_private_command("评分 现在", False) is None
-    assert text.detect_private_command("清空", True) is None
-    assert text.detect_private_command("评分", True) is None
+    assert text.detect_private_command("清空", True) is None  # public mode ignores commands
 
 
 def test_sender_display_name_fallback_chain():

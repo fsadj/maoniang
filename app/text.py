@@ -24,6 +24,9 @@ def parse_public_prompt(text: str) -> str | None:
 
 
 _CLEAR_ALIASES = frozenset({"清空", "清除", "重置", "重新开始", "reset", "清除上下文", "清空上下文"})
+_HELP_ALIASES = frozenset({"帮助", "命令", "help", "?"})
+_STATUS_ALIASES = frozenset({"状态", "status", "关于"})
+_UNDO_ALIASES = frozenset({"撤销", "撤回", "undo"})
 
 
 def detect_private_command(prompt: str, is_public: bool) -> str | None:
@@ -32,8 +35,12 @@ def detect_private_command(prompt: str, is_public: bool) -> str | None:
         return None
     if prompt in _CLEAR_ALIASES:
         return "clear"
-    if prompt == "评分":
-        return "rating"
+    if prompt in _HELP_ALIASES:
+        return "help"
+    if prompt in _STATUS_ALIASES:
+        return "status"
+    if prompt in _UNDO_ALIASES:
+        return "undo"
     return None
 
 

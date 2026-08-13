@@ -55,3 +55,10 @@ class BudgetGuard:
         if self._today() != self._day:
             return self._limit
         return max(0, self._limit - self._count)
+
+    @property
+    def used_today(self) -> int:
+        """Calls made today (0 when disabled or on a fresh day)."""
+        if self._limit <= 0 or self._today() != self._day:
+            return 0
+        return self._count

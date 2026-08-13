@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from . import config
 from .budget import BudgetGuard
 from .history import InMemoryStore
@@ -48,3 +50,20 @@ def get_service() -> ConversationService:
     if _service is None:
         _service = ConversationService(get_store(), get_client(), config.config)
     return _service
+
+
+_START = time.time()
+
+
+def status_info() -> dict:
+    """For the 状态 command: process uptime, today's upstream calls, daily budget limit."""
+    cfg = config.config
+    try:
+        calls = get_client().calls_today
+    except Exception:  # noqa: BLE001 — status must never crash
+        calls = 0
+    return {
+        "uptime_s": time.time() - _START,
+        "calls_today": calls,
+        "budget_limit": cfg.budget_daily_calls,
+    }

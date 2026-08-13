@@ -170,6 +170,19 @@ class SqliteConversationStore(InMemoryStore):
             )
             self._db.commit()
 
+    def drop_last_turn(self, scope: Scope) -> int:
+        n = super().drop_last_turn(scope)  # pop from the in-memory deque
+        if n:
+            stype, gid, uid = _scope_key(scope)
+            with self._db_lock:
+                self._db.execute(
+                    "DELETE FROM turns WHERE seq IN (SELECT seq FROM turns "
+                    "WHERE scope_type=? AND group_id=? AND user_id IS ? ORDER BY seq DESC LIMIT ?)",
+                    (stype, gid, uid, n),
+                )
+                self._db.commit()
+        return n
+
     def close(self) -> None:
         with self._db_lock:
             self._db.close()

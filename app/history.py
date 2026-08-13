@@ -109,3 +109,11 @@ class InMemoryStore:
         deque_ = self._deque_for(scope)
         for _ in range(min(n, len(deque_))):
             deque_.popleft()
+
+    def drop_last_turn(self, scope: Scope) -> int:
+        """Remove the last user+assistant pair (undo). Returns messages dropped (0 or 2)."""
+        deque_ = self._deque_for(scope)
+        n = min(2, len(deque_))
+        for _ in range(n):
+            deque_.pop()
+        return n

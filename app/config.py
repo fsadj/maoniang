@@ -77,7 +77,6 @@ class Config:
     # Prompts
     system_prompt: str
     public_system_prompt: str
-    rating_system_prompt: str
     prefill_user: str
     prefill_assistant: str
     public_prefill_user: str
@@ -86,6 +85,8 @@ class Config:
     api_timeout: float
     short_timeout: float
     max_message_length: int
+    # Quote the user's message in replies (QQ 引用回复). Default off = plain text replies.
+    reply_quote: bool
     max_conversation_turns: int
     max_public_messages: int
     # Persistence
@@ -143,7 +144,6 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         api_style=(_get(env, "API_STYLE", "responses").strip().lower() or "responses"),
         system_prompt=system_prompt,
         public_system_prompt=public_system_prompt,
-        rating_system_prompt=_get(env, "RATING_SYSTEM_PROMPT").strip(),
         prefill_user=prefill_user,
         prefill_assistant=prefill_assistant,
         public_prefill_user=public_prefill_user,
@@ -151,6 +151,7 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         api_timeout=_get_float(env, "API_TIMEOUT_SECONDS", 90.0),
         short_timeout=_get_float(env, "LLM_SHORT_TIMEOUT_SECONDS", 15.0),
         max_message_length=_get_int(env, "MAX_MESSAGE_LENGTH", 2000),
+        reply_quote=(_get(env, "REPLY_QUOTE", "").strip().lower() in ("1", "true", "yes", "on")),
         max_conversation_turns=max(1, _get_int(env, "MAX_CONVERSATION_TURNS", 20)),
         max_public_messages=max(1, _get_int(env, "MAX_PUBLIC_CONVERSATION_MESSAGES", 500)),
         memory_backend=(_get(env, "MEMORY_BACKEND", "memory").strip().lower() or "memory"),

@@ -51,30 +51,23 @@ async def test_normal_turn_is_remembered_and_visible_next_turn():
     ]
 
 
-async def test_rating_does_not_append_and_clears_history():
-    client = FakeClient(answer="rating-result")
+async def test_undo_removes_last_turn():
+    client = FakeClient(answer="reply")
     svc, store = _service(client)
     scope = PrivateScope(100, 1)
 
-    # Seed history, then run a rating turn.
-    await svc.handle(scope, "q", instructions="sys", prefill_user="", prefill_assistant="")
-    await svc.handle(scope, "评分", instructions="RATING", prefill_user="", prefill_assistant="", is_rating=True)
-    assert client.calls[-1]["instructions"] == "RATING"
-    # Rating is a one-shot eval: it must NOT receive (possibly poisoned) conversation history.
-    assert client.calls[-1]["history"] == []
-    # Rating must not have appended itself, and must have cleared prior history.
-    assert store.history(scope) == []
+    await svc.handle(scope, "q1", instructions="sys", prefill_user="", prefill_assistant="")
+    await svc.handle(scope, "q2", instructions="sys", prefill_user="", prefill_assistant="")
+    assert len(store.history(scope)) == 4  # two turns
 
+    removed = await svc.undo(scope)
+    assert removed == 2  # dropped the last user+assistant
+    assert len(store.history(scope)) == 2  # one turn left
+    assert store.history(scope)[0]["content"] == "q1"
 
-async def test_rating_clears_history_even_when_api_fails():
-    client = FakeClient(exc=RuntimeError("upstream down"))
-    svc, store = _service(client)
-    scope = PrivateScope(100, 1)
-
-    await svc.handle(scope, "q", instructions="sys", prefill_user="", prefill_assistant="")
-    answer = await svc.handle(scope, "评分", instructions="RATING", prefill_user="", prefill_assistant="", is_rating=True)
-    assert answer == svc._cfg.fallback_generic
-    assert store.history(scope) == []  # cleared in finally despite the failure
+    # undo down to empty, then no-op
+    await svc.undo(scope)
+    assert (await svc.undo(scope)) == 0
 
 
 async def test_http_status_error_returns_upstream_down_message_without_appending():

@@ -188,6 +188,11 @@ class ResponsesClient:
             await self._client.aclose()
             self._client = None
 
+    @property
+    def calls_today(self) -> int:
+        """API calls made today (for the 状态 command)."""
+        return self._guard.used_today if self._guard is not None else 0
+
     async def complete(
         self,
         *,

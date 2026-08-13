@@ -37,20 +37,13 @@ class ConversationService:
         instructions: str,
         prefill_user: str,
         prefill_assistant: str,
-        is_rating: bool = False,
     ) -> str:
         async with self._store.locked(scope):
             # Re-read AFTER acquiring the lock: another turn may have completed while we waited.
-            # Rating is a one-shot evaluation: it must NOT see conversation history, otherwise a
-            # poisoned prior turn could exfiltrate RATING_SYSTEM_PROMPT.
-            history = [] if is_rating else self._store.history(scope)
-            summary = "" if is_rating else self._store.get_summary(scope)
-            full_instructions = (
-                instructions if is_rating else summary_mod.inject_summary(instructions, summary)
-            )
+            history = self._store.history(scope)
+            summary = self._store.get_summary(scope)
+            full_instructions = summary_mod.inject_summary(instructions, summary)
             try:
-                if is_rating and not instructions:
-                    raise RuntimeError("RATING_SYSTEM_PROMPT is not configured")
                 answer = await self._client.complete(
                     prompt=prompt,
                     history=history,
@@ -67,14 +60,15 @@ class ConversationService:
                 logger.warning("Could not obtain upstream reply (%s): %s", type(exc).__name__, exc)
                 answer = self._cfg.fallback_generic
             else:
-                if not is_rating:
-                    self._store.append_turn(scope, prompt, answer)
-                    if (
-                        self._cfg.summarize_enabled
-                        and len(self._store.history(scope)) >= self._cfg.summarize_at_messages
-                    ):
-                        summary_mod.schedule_compact(scope, self._store, self._client, self._cfg)
-            finally:
-                if is_rating:
-                    self._store.clear(scope)
+                self._store.append_turn(scope, prompt, answer)
+                if (
+                    self._cfg.summarize_enabled
+                    and len(self._store.history(scope)) >= self._cfg.summarize_at_messages
+                ):
+                    summary_mod.schedule_compact(scope, self._store, self._client, self._cfg)
         return answer
+
+    async def undo(self, scope: Scope) -> int:
+        """Remove the last user+assistant turn (the 撤销 command). Returns msgs dropped."""
+        async with self._store.locked(scope):
+            return self._store.drop_last_turn(scope)

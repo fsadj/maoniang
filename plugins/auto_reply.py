@@ -1,4 +1,4 @@
-"""Thin group-message matcher. Delegates all logic to the app/ service layer."""
+"""Thin group/private message matcher. Delegates all logic to the app/ service layer."""
 
 from __future__ import annotations
 
@@ -11,11 +11,21 @@ from nonebot.rule import is_type
 from app import text
 from app.config import config
 from app.history import PrivateScope, PublicScope
-from app.runtime import get_service
+from app.runtime import get_service, status_info
 
 logger = logging.getLogger(__name__)
 
 auto_reply = on_message(rule=is_type(GroupMessageEvent), priority=20, block=False)
+private_reply = on_message(rule=is_type(PrivateMessageEvent), priority=20, block=False)
+
+_HELP_TEXT = (
+    "指令(私聊直接发 / 群里 @我 + 指令):\n"
+    "清空 / 清除 / 重置 / reset —— 清掉当前对话上下文\n"
+    "撤销 / undo —— 删掉上一轮\n"
+    "状态 / status —— 运行时长、今日调用、预算\n"
+    "帮助 / ? —— 这条\n"
+    "(仅群)公共 + 换行 + 内容 —— 进入本群共享对话"
+)
 
 
 def _should_listen_to_user(event: GroupMessageEvent) -> bool:
@@ -29,9 +39,7 @@ def _should_listen_to_user(event: GroupMessageEvent) -> bool:
     return not config.target_group_ids or event.group_id in config.target_group_ids
 
 
-def _instructions_for(is_public: bool, is_rating: bool) -> str:
-    if is_rating:
-        return config.rating_system_prompt
+def _instructions_for(is_public: bool) -> str:
     return config.public_system_prompt if is_public else config.system_prompt
 
 
@@ -39,6 +47,50 @@ def _prefill_for(is_public: bool) -> tuple[str, str]:
     if is_public:
         return config.public_prefill_user, config.public_prefill_assistant
     return config.prefill_user, config.prefill_assistant
+
+
+def _fmt_uptime(seconds: float) -> str:
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m"
+    return f"{s // 3600}h{(s % 3600) // 60}m"
+
+
+def _status_text() -> str:
+    info = status_info()
+    if info["budget_limit"] > 0:
+        budget = f"剩余 {max(0, info['budget_limit'] - info['calls_today'])}/{info['budget_limit']}"
+    else:
+        budget = "无上限"
+    return (
+        f"⏱ 运行 {_fmt_uptime(info['uptime_s'])}\n"
+        f"📊 今日调用 {info['calls_today']} 次\n"
+        f"💰 预算 {budget}"
+    )
+
+
+def _reply_msg(event, text: str):
+    """Build the outgoing message: quoted (引用) if REPLY_QUOTE, else plain text."""
+    if config.reply_quote:
+        return MessageSegment.reply(event.message_id) + text
+    return text
+
+
+async def _command_reply(command: str | None, scope) -> str | None:
+    """Handle a meta command (no API call). Returns reply text, or None if not a command."""
+    if command == "clear":
+        await get_service().clear(scope)
+        return "上下文已清空。"
+    if command == "undo":
+        removed = await get_service().undo(scope)
+        return "已撤销上一轮。" if removed else "没有可撤销的了。"
+    if command == "help":
+        return _HELP_TEXT
+    if command == "status":
+        return _status_text()
+    return None
 
 
 @auto_reply.handle()
@@ -65,29 +117,20 @@ async def handle_group_message(event: GroupMessageEvent) -> None:
         PublicScope(event.group_id) if is_public else PrivateScope(event.group_id, event.user_id)
     )
 
-    service = get_service()
-    if command == "clear":
-        await service.clear(scope)
-        await auto_reply.finish(MessageSegment.reply(event.message_id) + "上下文已清空。")
+    reply = await _command_reply(command, scope)
+    if reply is not None:
+        await auto_reply.finish(_reply_msg(event, reply))
         return
 
-    is_rating = command == "rating"
     prefill_user, prefill_assistant = _prefill_for(is_public)
-    instructions = _instructions_for(is_public, is_rating)
-    answer = await service.handle(
+    answer = await get_service().handle(
         scope,
         prompt,
-        instructions=instructions,
+        instructions=_instructions_for(is_public),
         prefill_user=prefill_user,
         prefill_assistant=prefill_assistant,
-        is_rating=is_rating,
     )
-    await auto_reply.finish(MessageSegment.reply(event.message_id) + answer)
-
-
-# ---- Private (1:1) chat ----
-# Rule-level type filter (is_type) so this matcher never runs / never blocks for group events.
-private_reply = on_message(rule=is_type(PrivateMessageEvent), priority=20, block=False)
+    await auto_reply.finish(_reply_msg(event, answer))
 
 
 @private_reply.handle()
@@ -104,24 +147,18 @@ async def handle_private_message(event: PrivateMessageEvent) -> None:
 
     command = text.detect_private_command(raw, is_public=False)
     prompt = raw[: config.max_message_length]
-    # DM history uses a (0, user_id) scope — deliberately separate from any group context.
     scope = PrivateScope(0, event.user_id)
 
-    service = get_service()
-    if command == "clear":
-        await service.clear(scope)
-        await private_reply.finish(MessageSegment.reply(event.message_id) + "上下文已清空。")
+    reply = await _command_reply(command, scope)
+    if reply is not None:
+        await private_reply.finish(_reply_msg(event, reply))
         return
 
-    is_rating = command == "rating"
-    prefill_user, prefill_assistant = _prefill_for(is_public=False)
-    instructions = config.rating_system_prompt if is_rating else config.system_prompt
-    answer = await service.handle(
+    answer = await get_service().handle(
         scope,
         prompt,
-        instructions=instructions,
-        prefill_user=prefill_user,
-        prefill_assistant=prefill_assistant,
-        is_rating=is_rating,
+        instructions=config.system_prompt,
+        prefill_user=config.prefill_user,
+        prefill_assistant=config.prefill_assistant,
     )
-    await private_reply.finish(MessageSegment.reply(event.message_id) + answer)
+    await private_reply.finish(_reply_msg(event, answer))
