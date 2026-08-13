@@ -210,6 +210,9 @@ class ResponsesClient:
             payload: dict[str, Any] = {
                 "model": self._cfg.api_model,
                 "messages": build_chat_messages(instructions, prompt, history, prefill_user, prefill_assistant),
+                # DeepSeek v4: disable reasoning for faster, more direct casual replies
+                # (matches the blog worker's working config). Ignored by non-DeepSeek endpoints.
+                "thinking": {"type": "disabled"},
             }
             extract = extract_chat_content
         else:

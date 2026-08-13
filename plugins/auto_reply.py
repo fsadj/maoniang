@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 
 from nonebot import on_message
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment, PrivateMessageEvent
+from nonebot.rule import is_type
 
 from app import text
 from app.config import config
@@ -14,7 +15,7 @@ from app.runtime import get_service
 
 logger = logging.getLogger(__name__)
 
-auto_reply = on_message(priority=20, block=False)
+auto_reply = on_message(rule=is_type(GroupMessageEvent), priority=20, block=False)
 
 
 def _should_listen_to_user(event: GroupMessageEvent) -> bool:
@@ -82,3 +83,45 @@ async def handle_group_message(event: GroupMessageEvent) -> None:
         is_rating=is_rating,
     )
     await auto_reply.finish(MessageSegment.reply(event.message_id) + answer)
+
+
+# ---- Private (1:1) chat ----
+# Rule-level type filter (is_type) so this matcher never runs / never blocks for group events.
+private_reply = on_message(rule=is_type(PrivateMessageEvent), priority=20, block=False)
+
+
+@private_reply.handle()
+async def handle_private_message(event: PrivateMessageEvent) -> None:
+    """DM is opt-in via TARGET_USER_IDS only (higher abuse risk than group @)."""
+    if str(event.user_id) == str(event.self_id):
+        return
+    if event.user_id not in config.target_user_ids:
+        return
+
+    raw = event.get_plaintext().strip()
+    if not raw:
+        return
+
+    command = text.detect_private_command(raw, is_public=False)
+    prompt = raw[: config.max_message_length]
+    # DM history uses a (0, user_id) scope — deliberately separate from any group context.
+    scope = PrivateScope(0, event.user_id)
+
+    service = get_service()
+    if command == "clear":
+        await service.clear(scope)
+        await private_reply.finish(MessageSegment.reply(event.message_id) + "上下文已清空。")
+        return
+
+    is_rating = command == "rating"
+    prefill_user, prefill_assistant = _prefill_for(is_public=False)
+    instructions = config.rating_system_prompt if is_rating else config.system_prompt
+    answer = await service.handle(
+        scope,
+        prompt,
+        instructions=instructions,
+        prefill_user=prefill_user,
+        prefill_assistant=prefill_assistant,
+        is_rating=is_rating,
+    )
+    await private_reply.finish(MessageSegment.reply(event.message_id) + answer)
