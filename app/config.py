@@ -105,6 +105,11 @@ class Config:
     status_group_ids: frozenset[int]
     online_message: str
     offline_message: str
+    # In-character fallback messages shown on upstream/error/budget failures (overridable;
+    # defaults are a non-explicit nya voice). Set FALLBACK_* in .env for your own flavor.
+    fallback_upstream: str
+    fallback_generic: str
+    fallback_budget: str
     # Derived convenience (not from env)
     personal_history_max: int = field(init=False)
 
@@ -161,6 +166,9 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         status_group_ids=csv_ints("STATUS_GROUP_IDS", env),
         online_message=_get(env, "ONLINE_MESSAGE").strip(),
         offline_message=_get(env, "OFFLINE_MESSAGE").strip(),
+        fallback_upstream=_get(env, "FALLBACK_UPSTREAM", "nya…脑子卡住了，等会儿再来戳我喵"),
+        fallback_generic=_get(env, "FALLBACK_GENERIC", "呜…nya晕过去了，叫管理员来把我弄醒喵"),
+        fallback_budget=_get(env, "FALLBACK_BUDGET", "nya今天被聊累啦，明天再来吧喵"),
     )
 
 

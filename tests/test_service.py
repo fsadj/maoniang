@@ -73,7 +73,7 @@ async def test_rating_clears_history_even_when_api_fails():
 
     await svc.handle(scope, "q", instructions="sys", prefill_user="", prefill_assistant="")
     answer = await svc.handle(scope, "评分", instructions="RATING", prefill_user="", prefill_assistant="", is_rating=True)
-    assert answer == "我暂时无法处理这条消息，请检查机器人配置或稍后再试。"
+    assert answer == svc._cfg.fallback_generic
     assert store.history(scope) == []  # cleared in finally despite the failure
 
 
@@ -83,7 +83,7 @@ async def test_http_status_error_returns_upstream_down_message_without_appending
     scope = PrivateScope(100, 1)
 
     answer = await svc.handle(scope, "q", instructions="sys", prefill_user="", prefill_assistant="")
-    assert answer == "上游服务暂时不可用，请稍后再试。"
+    assert answer == svc._cfg.fallback_upstream
     assert store.history(scope) == []  # not appended on failure
 
 
@@ -93,7 +93,7 @@ async def test_budget_exceeded_returns_budget_message_without_appending():
     scope = PrivateScope(100, 1)
 
     answer = await svc.handle(scope, "q", instructions="sys", prefill_user="", prefill_assistant="")
-    assert answer == "今天的额度已用完，请明天再试。"
+    assert answer == svc._cfg.fallback_budget
     assert store.history(scope) == []
 
 

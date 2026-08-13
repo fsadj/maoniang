@@ -18,10 +18,6 @@ from .llm import ResponsesClient
 
 logger = logging.getLogger(__name__)
 
-_UPSTREAM_DOWN = "上游服务暂时不可用，请稍后再试。"
-_GENERIC_FAILURE = "我暂时无法处理这条消息，请检查机器人配置或稍后再试。"
-_BUDGET_OUT = "今天的额度已用完，请明天再试。"
-
 
 class ConversationService:
     def __init__(self, store: ConversationStore, client: ResponsesClient, cfg: Config) -> None:
@@ -64,12 +60,12 @@ class ConversationService:
                 )
             except httpx.HTTPStatusError as exc:
                 logger.warning("Upstream API returned HTTP %s", exc.response.status_code)
-                answer = _UPSTREAM_DOWN
+                answer = self._cfg.fallback_upstream
             except BudgetExceeded:
-                answer = _BUDGET_OUT
+                answer = self._cfg.fallback_budget
             except (httpx.HTTPError, RuntimeError, ValueError) as exc:
                 logger.warning("Could not obtain upstream reply (%s): %s", type(exc).__name__, exc)
-                answer = _GENERIC_FAILURE
+                answer = self._cfg.fallback_generic
             else:
                 if not is_rating:
                     self._store.append_turn(scope, prompt, answer)
