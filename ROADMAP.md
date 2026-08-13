@@ -1,7 +1,7 @@
 # maoniang 开发路线图
 
 > 活的迭代清单。`[x]` = 已完成,`[ ]` = 待办。按优先级排序;每步可独立上线、不破坏现网。
-> 现网:腾讯云 VPS `49.233.183.182`,bot(systemd)+ NapCat,登录号 `2150196943`,触发号 `2661277633`,私聊+群@ 已通,DeepSeek `deepseek-v4-flash`。
+> 现网:腾讯云 VPS `49.233.183.182`,bot(systemd)+ NapCat,登录号 `2150196943`,触发号 `2661277633`+同学 `2785660996`,私聊+群@ 已通,DeepSeek `deepseek-v4-flash`(关 thinking),④ 摘要压缩已启用,兜底 nya 化可配。破甲 `SYSTEM_PROMPT` 在 `.env` 由用户维护(部署 `--exclude=.env`,勿覆盖)。
 
 ## ✅ 已完成
 - [x] Phase 0 骨架:`app/`(config / text / history / budget / llm / service / runtime),thin matchers,长驻 httpx client + 有界 retry + 日预算护栏(44 测试绿)
@@ -16,7 +16,7 @@
 
 - [x] 角色设定:身份 / 性格 / 说话风格 / 口癖 / 记忆设定 / 行为边界 → 写进 `SYSTEM_PROMPT`(nya:懒宅猫娘,真寻式反 AI 味规则 + few-shot)
 - [x] DM / 群 / `公共` 三套人设(DM + 群个人用 `SYSTEM_PROMPT`;`公共` 留空回退到 nya;字段已就位,要差异化时再分)
-- [x] `PREFILL_ASSISTANT` 预填开场白锚住角色语气(已设 `在吗` → `嗯，怎么了喵`)
+- [x] `PREFILL_ASSISTANT` 预填开场白锚住角色语气(初设 `在吗`→`嗯？怎么了`;现由你在 `.env` 维护,可能已改)
 - [x] 一致性规则:不自称 AI、保持口吻、拒答超纲元问题、防角色漂移(写进人设)
 - [x] **模型选型**:SFW nya 在 DeepSeek `deepseek-v4-flash` 直接可用,**不换端点**;若后续转 NSFW 再换(海外经代理 / 自建开源),不走破甲
 
@@ -29,17 +29,17 @@
 - [x] InMemory 与 Sqlite 行为一致(maxlen、隔离、清空)+ 跨"重启"持久化测试(6 用例)
 
 ## ③ 注入加固 — **P1**  *(现在 live + 共享,这是真暴露面,扩用前必做)*
-- [ ] 群名片/昵称入 prompt 前脱敏:剥 `[]{}`/换行/角色词(`系统`/`SYSTEM`/`assistant`/`user`)、限长、可疑则置 `未知成员`
-- [ ] `公共` 共享历史按 `(群, user_id)` 隔离 → 防跨用户投毒
-- [ ] 三个 system prompt 加"不可透露"条款 + 输出与 prompt 相似度兜底 → 防套出人设
-- [ ] `评分` 路径不带历史 → 防套出 `RATING_SYSTEM_PROMPT`
-- [ ] 回声注入兜底:回复与原文相似度 > 阈值则拒绝(防钓鱼/冒充,bot 被当传声筒)
+- [x] 群名片/昵称入 prompt 前脱敏:剥 `[]{}`/换行/角色词(`系统`/`SYSTEM`/`assistant`/`user`)、限长、可疑则置 `未知成员`
+- [~] `公共` 共享历史按 `(群, user_id)` 隔离 → 防跨用户投毒
+- [~] 三个 system prompt 加"不可透露"条款 + 输出与 prompt 相似度兜底 → 防套出人设
+- [x] `评分` 路径不带历史 → 防套出 `RATING_SYSTEM_PROMPT`
+- [~] 回声注入兜底:回复与原文相似度 > 阈值则拒绝(防钓鱼/冒充,bot 被当传声筒)
 
 ## ④ 记忆 / 上下文增强 — **P1**
-- [ ] 摘要压缩:超阈值把旧对话折成摘要塞 `instructions`(后台任务:**快照→释放锁→调 API→重锁校验 seq** 再删)
-- [ ] per-key inflight 去重 + 熔断(上游抖动时防自我 DoS)
-- [ ] 长期事实抽取/注入(偏好 / 未完话题 / 人名),新增 `忘记` 命令
-- [ ] 后台调用不带 reasoning + 用便宜模型;群级事实**默认拒绝写入**(防投毒)
+- [x] 摘要压缩:超阈值把旧对话折成摘要塞 `instructions`(后台任务:**快照→释放锁→调 API→重锁校验 seq** 再删)—— 已部署 + **已启用**(`SUMMARIZE_ENABLED=true`);摘要以“数据非指令”注入破甲之后
+- [x] per-key inflight 去重(`_inflight`)+ 失败不损坏(summarize 失败即跳过,不重试不崩)
+- [~] 长期事实抽取/注入(偏好 / 未完话题 / 人名)+ `忘记` 命令(**延后**:Tier 3,会更深地 compose 进破甲,等需要再做)
+- [x] 后台调用复用 `thinking:disabled`;`SUMMARIZE_MODEL` 可选便宜模型
 
 ## ⑤ 多模态(图片)— **P2**
 - [ ] 检测 `image` 段 → `asyncio.to_thread` Pillow 缩放(**CPU,不是 I/O**)→ base64
@@ -68,5 +68,5 @@
 - [ ] 可观测:每次上游调用记 `model` + 大致 token,便于调参/查成本
 - [ ] 备份:`.env`(含 key)和 sqlite 数据纳入服务器定期备份
 
-## 建议起步
-**①(角色+模型)→ ②(持久化)**:前者让 bot"有灵魂",后者修最大体验硬伤,都不碰现网稳定。③ 在你拉更多人/扩大使用前做掉。
+## 当前进度 / 下一步
+**①②③④ 已完成并上线**(③ 部分延后、④ 摘要已启用;⑤ 多模态因 DeepSeek 纯文本推迟)。**下一步建议 ⑥ harness**(流式占位/工具,不碰破甲);⑦ 免@群聊最高风险放最后;③④ 延后项视需要补。
