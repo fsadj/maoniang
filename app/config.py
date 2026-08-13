@@ -87,6 +87,10 @@ class Config:
     max_message_length: int
     # Quote the user's message in replies (QQ 引用回复). Default off = plain text replies.
     reply_quote: bool
+    # Anti-detection: random delay before replying (human pacing) + probabilistic reply.
+    reply_delay_min: float
+    reply_delay_max: float
+    reply_probability: float
     max_conversation_turns: int
     max_public_messages: int
     # Persistence
@@ -152,6 +156,9 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         short_timeout=_get_float(env, "LLM_SHORT_TIMEOUT_SECONDS", 15.0),
         max_message_length=_get_int(env, "MAX_MESSAGE_LENGTH", 2000),
         reply_quote=(_get(env, "REPLY_QUOTE", "").strip().lower() in ("1", "true", "yes", "on")),
+        reply_delay_min=max(0.0, _get_float(env, "REPLY_DELAY_MIN", 1.5)),
+        reply_delay_max=max(0.0, _get_float(env, "REPLY_DELAY_MAX", 4.5)),
+        reply_probability=min(1.0, max(0.0, _get_float(env, "REPLY_PROBABILITY", 1.0))),
         max_conversation_turns=max(1, _get_int(env, "MAX_CONVERSATION_TURNS", 20)),
         max_public_messages=max(1, _get_int(env, "MAX_PUBLIC_CONVERSATION_MESSAGES", 500)),
         memory_backend=(_get(env, "MEMORY_BACKEND", "memory").strip().lower() or "memory"),

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 
 from nonebot import on_message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment, PrivateMessageEvent
@@ -122,6 +124,10 @@ async def handle_group_message(event: GroupMessageEvent) -> None:
         await auto_reply.finish(_reply_msg(event, reply))
         return
 
+    # Anti-detection: probabilistic reply (checked BEFORE the API call so a dropped
+    # turn costs nothing). Meta commands above are exempt — only normal chat can be skipped.
+    if config.reply_probability < 1.0 and random.random() >= config.reply_probability:
+        return
     prefill_user, prefill_assistant = _prefill_for(is_public)
     answer = await get_service().handle(
         scope,
@@ -130,6 +136,8 @@ async def handle_group_message(event: GroupMessageEvent) -> None:
         prefill_user=prefill_user,
         prefill_assistant=prefill_assistant,
     )
+    if config.reply_delay_max > 0:
+        await asyncio.sleep(random.uniform(config.reply_delay_min, config.reply_delay_max))
     await auto_reply.finish(_reply_msg(event, answer))
 
 
@@ -154,6 +162,8 @@ async def handle_private_message(event: PrivateMessageEvent) -> None:
         await private_reply.finish(_reply_msg(event, reply))
         return
 
+    if config.reply_probability < 1.0 and random.random() >= config.reply_probability:
+        return
     answer = await get_service().handle(
         scope,
         prompt,
@@ -161,4 +171,6 @@ async def handle_private_message(event: PrivateMessageEvent) -> None:
         prefill_user=config.prefill_user,
         prefill_assistant=config.prefill_assistant,
     )
+    if config.reply_delay_max > 0:
+        await asyncio.sleep(random.uniform(config.reply_delay_min, config.reply_delay_max))
     await private_reply.finish(_reply_msg(event, answer))
